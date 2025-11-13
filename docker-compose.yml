@@ -1,0 +1,338 @@
+version: '3.8'
+
+services:
+  # Eureka Server
+  eureka-server:
+    build:
+      context: .
+      dockerfile: eureka-server/Dockerfile
+    container_name: hunger-saviour-eureka-server
+    ports:
+      - "8761:8761"
+    networks:
+      - hunger-saviour-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: hunger-saviour-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - hunger-saviour-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: hunger-saviour-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - hunger-saviour-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL Databases
+  postgres-users:
+    image: postgres:15-alpine
+    container_name: hunger-saviour-postgres-users
+    environment:
+      POSTGRES_DB: hunger_saviour_users
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-users-data:/var/lib/postgresql/data
+    networks:
+      - hunger-saviour-network
+
+  postgres-restaurants:
+    image: postgres:15-alpine
+    container_name: hunger-saviour-postgres-restaurants
+    environment:
+      POSTGRES_DB: hunger_saviour_restaurants
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-restaurants-data:/var/lib/postgresql/data
+    networks:
+      - hunger-saviour-network
+
+  postgres-orders:
+    image: postgres:15-alpine
+    container_name: hunger-saviour-postgres-orders
+    environment:
+      POSTGRES_DB: hunger_saviour_orders
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres-orders-data:/var/lib/postgresql/data
+    networks:
+      - hunger-saviour-network
+
+  postgres-payments:
+    image: postgres:15-alpine
+    container_name: hunger-saviour-postgres-payments
+    environment:
+      POSTGRES_DB: hunger_saviour_payments
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres-payments-data:/var/lib/postgresql/data
+    networks:
+      - hunger-saviour-network
+
+  # User Service
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    container_name: hunger-saviour-user-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-users:5432/hunger_saviour_users
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    ports:
+      - "8081:8081"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      postgres-users:
+        condition: service_started
+    networks:
+      - hunger-saviour-network
+
+  # Restaurant Service
+  restaurant-service:
+    build:
+      context: .
+      dockerfile: restaurant-service/Dockerfile
+    container_name: hunger-saviour-restaurant-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-restaurants:5432/hunger_saviour_restaurants
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    ports:
+      - "8082:8082"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      postgres-restaurants:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - hunger-saviour-network
+
+  # Order Service
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+    container_name: hunger-saviour-order-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-orders:5432/hunger_saviour_orders
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    ports:
+      - "8083:8083"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      postgres-orders:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - hunger-saviour-network
+
+  # Payment Service
+  payment-service:
+    build:
+      context: .
+      dockerfile: payment-service/Dockerfile
+    container_name: hunger-saviour-payment-service
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres-payments:5432/hunger_saviour_payments
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-sk_test_yourstripekey}
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    ports:
+      - "8084:8084"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      postgres-payments:
+        condition: service_started
+    networks:
+      - hunger-saviour-network
+
+  # Notification Service
+  notification-service:
+    build:
+      context: .
+      dockerfile: notification-service/Dockerfile
+    container_name: hunger-saviour-notification-service
+    environment:
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      SPRING_MAIL_PORT: ${MAIL_PORT:-587}
+      SPRING_MAIL_USERNAME: ${MAIL_USERNAME}
+      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD}
+    ports:
+      - "8085:8085"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - hunger-saviour-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: hunger-saviour-api-gateway
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    ports:
+      - "8080:8080"
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+      restaurant-service:
+        condition: service_started
+      order-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+    networks:
+      - hunger-saviour-network
+
+  # Prometheus for Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hunger-saviour-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9090:9090"
+    networks:
+      - hunger-saviour-network
+
+  # Grafana for Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hunger-saviour-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - hunger-saviour-network
+
+  # Elasticsearch for Logging
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: hunger-saviour-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - hunger-saviour-network
+
+  # Logstash for Log Processing
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: hunger-saviour-logstash
+    volumes:
+      - ./monitoring/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+    ports:
+      - "5000:5000"
+    depends_on:
+      - elasticsearch
+    networks:
+      - hunger-saviour-network
+
+  # Kibana for Log Visualization
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: hunger-saviour-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      - elasticsearch
+    networks:
+      - hunger-saviour-network
+
+volumes:
+  postgres-users-data:
+  postgres-restaurants-data:
+  postgres-orders-data:
+  postgres-payments-data:
+  prometheus-data:
+  grafana-data:
+  elasticsearch-data:
+
+networks:
+  hunger-saviour-network:
+    driver: bridge
