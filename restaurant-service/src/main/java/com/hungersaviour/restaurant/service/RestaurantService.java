@@ -1,5 +1,6 @@
 package com.hungersaviour.restaurant.service;
 
+import com.hungersaviour.restaurant.exception.ResourceNotFoundException;
 import com.hungersaviour.restaurant.model.MenuItem;
 import com.hungersaviour.restaurant.model.Restaurant;
 import com.hungersaviour.restaurant.repository.MenuItemRepository;
@@ -28,7 +29,7 @@ public class RestaurantService {
     @Cacheable(value = "restaurants", key = "#id")
     public Restaurant getRestaurantById(Long id) {
         return restaurantRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Restaurant not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Restaurant not found"));
     }
 
     @Cacheable(value = "restaurants", key = "'all'")
@@ -74,7 +75,7 @@ public class RestaurantService {
     @CacheEvict(value = "menuItems", allEntries = true)
     public MenuItem updateMenuItem(Long id, MenuItem menuItem) {
         MenuItem existing = menuItemRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Menu item not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Menu item not found"));
         existing.setName(menuItem.getName());
         existing.setDescription(menuItem.getDescription());
         existing.setPrice(menuItem.getPrice());
@@ -86,7 +87,7 @@ public class RestaurantService {
     @CacheEvict(value = "menuItems", allEntries = true)
     public void deleteMenuItem(Long id) {
         MenuItem menuItem = menuItemRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Menu item not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Menu item not found"));
         menuItem.setIsAvailable(false);
         menuItemRepository.save(menuItem);
     }

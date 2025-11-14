@@ -4,6 +4,8 @@ import com.hungersaviour.order.client.PaymentServiceClient;
 import com.hungersaviour.order.client.RestaurantServiceClient;
 import com.hungersaviour.order.client.UserServiceClient;
 import com.hungersaviour.order.dto.*;
+import com.hungersaviour.order.exception.InvalidRequestException;
+import com.hungersaviour.order.exception.ResourceNotFoundException;
 import com.hungersaviour.order.model.Order;
 import com.hungersaviour.order.model.OrderItem;
 import com.hungersaviour.order.repository.OrderRepository;
@@ -46,14 +48,14 @@ public class OrderService {
         // Step 1: Fetch user details
         UserResponse user = userServiceClient.getUserById(request.getUserId());
         if (user == null) {
-            throw new RuntimeException("User not found: " + request.getUserId());
+            throw new ResourceNotFoundException("User not found: " + request.getUserId());
         }
         log.info("User found: {}", user.getEmail());
         
         // Step 2: Fetch restaurant details
         RestaurantResponse restaurant = restaurantServiceClient.getRestaurantById(request.getRestaurantId());
         if (restaurant == null) {
-            throw new RuntimeException("Restaurant not found: " + request.getRestaurantId());
+            throw new ResourceNotFoundException("Restaurant not found: " + request.getRestaurantId());
         }
         log.info("Restaurant found: {}", restaurant.getName());
         
@@ -132,14 +134,14 @@ public class OrderService {
                     log.error("Payment failed for order: {}", order.getId());
                     
                     publishOrderEvent(order, user, restaurant, "PAYMENT_FAILED");
-                    throw new RuntimeException("Payment failed: " + paymentResponse.getMessage());
+                    throw new InvalidRequestException("Payment failed: " + paymentResponse.getMessage());
                 }
             } catch (Exception e) {
                 log.error("Payment processing error: {}", e.getMessage());
                 order.setStatus("PAYMENT_FAILED");
                 orderRepository.save(order);
                 publishOrderEvent(order, user, restaurant, "PAYMENT_FAILED");
-                throw new RuntimeException("Payment processing failed: " + e.getMessage());
+                throw new InvalidRequestException("Payment processing failed: " + e.getMessage());
             }
         }
 
@@ -169,7 +171,7 @@ public class OrderService {
 
     public Order getOrderById(Long id) {
         return orderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Order not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found"));
     }
 
     public List<Order> getOrdersByUser(Long userId) {
