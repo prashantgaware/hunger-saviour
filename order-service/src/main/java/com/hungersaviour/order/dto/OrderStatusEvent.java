@@ -1,4 +1,4 @@
-package com.hungersaviour.notification.dto;
+package com.hungersaviour.order.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

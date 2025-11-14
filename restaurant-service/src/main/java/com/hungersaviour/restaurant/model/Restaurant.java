@@ -28,6 +28,7 @@ public class Restaurant {
     private String cuisine;
     private String description;
     private String phoneNumber;
+    private String ownerEmail; // Email for restaurant notifications
     
     @Column(nullable = false)
     private Long ownerId;
