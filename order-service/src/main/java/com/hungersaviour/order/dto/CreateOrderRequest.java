@@ -9,6 +9,7 @@ public class CreateOrderRequest {
     private Long userId;
     private Long restaurantId;
     private String deliveryAddress;
+    private String paymentMethodId; // Stripe payment method ID
     private List<OrderItemDto> items;
 
     @Data
