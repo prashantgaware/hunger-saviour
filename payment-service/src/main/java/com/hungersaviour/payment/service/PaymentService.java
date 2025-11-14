@@ -2,6 +2,8 @@ package com.hungersaviour.payment.service;
 
 import com.hungersaviour.payment.dto.PaymentRequest;
 import com.hungersaviour.payment.dto.PaymentResponse;
+import com.hungersaviour.payment.exception.PaymentProcessingException;
+import com.hungersaviour.payment.exception.ResourceNotFoundException;
 import com.hungersaviour.payment.model.Payment;
 import com.hungersaviour.payment.repository.PaymentRepository;
 import com.stripe.exception.StripeException;
@@ -81,12 +83,12 @@ public class PaymentService {
 
     public Payment getPaymentById(Long id) {
         return paymentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Payment not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found"));
     }
 
     public Payment getPaymentByOrderId(Long orderId) {
         return paymentRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new RuntimeException("Payment not found for order"));
+                .orElseThrow(() -> new ResourceNotFoundException("Payment not found for order"));
     }
 
     public List<Payment> getPaymentsByUser(Long userId) {
@@ -97,7 +99,7 @@ public class PaymentService {
         Payment payment = getPaymentById(paymentId);
 
         if (!"SUCCESS".equals(payment.getStatus())) {
-            throw new RuntimeException("Can only refund successful payments");
+            throw new PaymentProcessingException("Can only refund successful payments");
         }
 
         try {
@@ -119,7 +121,7 @@ public class PaymentService {
             );
 
         } catch (StripeException e) {
-            throw new RuntimeException("Refund failed: " + e.getMessage());
+            throw new PaymentProcessingException("Refund failed: " + e.getMessage());
         }
     }
 }
